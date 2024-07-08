@@ -37,8 +37,6 @@ jobs:
           task-definition: task-definition.json
           service: ${{ secrets.ECS_SERVICE }}
           cluster: ${{ secrets.ECS_CLUSTER }}
-          image: khabdrick/ecsproject:${{ github.sha }}
-          region: ${{ secrets.AWS_REGION }}
 
       - name: Save Previous Image Tag
         run: echo "PREVIOUS_IMAGE_TAG=${{ github.sha }}" > previous_image_tag.txt
