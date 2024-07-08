@@ -27,6 +27,7 @@ jobs:
         run: |
           docker build -t khabdrick/ecsproject:${{ github.sha }} .
           docker push khabdrick/ecsproject:${{ github.sha }}
+          echo "image=khabdrick/ecsproject:${{ github.sha }}" >> $GITHUB_OUTPUT
 
       - name: Replace image in task definition
         run: |
