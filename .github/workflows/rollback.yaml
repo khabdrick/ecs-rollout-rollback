@@ -1,0 +1,65 @@
+name: Rollback to Previous Deployment
+
+on:
+  workflow_run:
+    workflows: ["Deploy to ECS"]
+    types:
+      - completed
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    needs: [deploy]
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    strategy:
+      matrix:
+        attempt: [1, 2, 3, 4, 5]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Wait before rollback attempt ${{ matrix.attempt }}
+        run: sleep $(( ${{ matrix.attempt }} * 300 ))
+
+      - name: Check for CloudWatch Alarms
+        run: |
+          CPU_ALARM_STATE=$(aws cloudwatch describe-alarms --alarm-names "HighCPUUtilization" --state-value ALARM --query 'MetricAlarms[0].StateValue' --region ${{ secrets.AWS_REGION }})
+          MEMORY_ALARM_STATE=$(aws cloudwatch describe-alarms --alarm-names "HighMemoryUtilization" --state-value ALARM --query 'MetricAlarms[0].StateValue' --region ${{ secrets.AWS_REGION }})
+          HTTP_ALARM_STATE=$(aws cloudwatch describe-alarms --alarm-names "HighHTTP5xxErrors" --state-value ALARM --query 'MetricAlarms[0].StateValue' --region ${{ secrets.AWS_REGION }})
+          if [ "$CPU_ALARM_STATE" == "ALARM" ] || [ "$MEMORY_ALARM_STATE" == "ALARM" ] || [ "$HTTP_ALARM_STATE" == "ALARM" ]; then
+            echo "ALARM"
+          else
+            echo "OK"
+          fi
+        continue-on-error: true
+        id: check_alarm_state
+
+      - name: Get Previous Image Tag
+        id: get_previous_tag
+        run: |
+          PREVIOUS_IMAGE_TAG=$(cat previous_image_tag.txt)
+          echo "::set-output name=tag::${PREVIOUS_IMAGE_TAG}"
+
+      - name: Install AWS CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y awscli
+
+      - name: Configure AWS CLI
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws configure set region ${{ secrets.AWS_REGION }}
+
+      - name: Rollback to previous task definition
+        run: |
+          PREV_TASK_DEF=$(aws ecs describe-services \
+            --cluster ${{ secrets.ECS_CLUSTER }} \
+            --services ${{ secrets.ECS_SERVICE }} \
+            --query 'services[0].deployments[1].taskDefinition' \
+            --output text)
+          aws ecs update-service \
+            --cluster ${{ secrets.ECS_CLUSTER }} \
+            --service ${{ secrets.ECS_SERVICE }} \
+            --task-definition $PREV_TASK_DEF
+  
