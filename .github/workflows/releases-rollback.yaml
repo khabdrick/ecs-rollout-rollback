@@ -85,9 +85,15 @@ jobs:
 
       - name: Wait for service stabilization
         run: |
-          aws ecs wait services-stable \
-            --cluster ${{ secrets.ECS_CLUSTER }} \
-            --services ${{ secrets.ECS_SERVICE }}
+          for attempt in {1..10}; do
+            if aws ecs wait services-stable --cluster ${{ secrets.ECS_CLUSTER }} --services ${{ secrets.ECS_SERVICE }}; then
+              echo "Service stabilized on attempt $attempt"
+              break
+            else
+              echo "Attempt $attempt failed, retrying..."
+              sleep 30
+            fi
+          done
 
   rollback:
     runs-on: ubuntu-latest
