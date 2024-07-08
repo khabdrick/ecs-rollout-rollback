@@ -27,28 +27,28 @@ jobs:
         run: |
           docker build -t khabdrick/ecsproject:${{ github.sha }} .
           docker push khabdrick/ecsproject:${{ github.sha }}
-          echo "image=khabdrick/ecsproject:${{ github.sha }}" >> $GITHUB_OUTPUT
+          docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/ecsproject:latest .
+          docker push ${{ secrets.DOCKER_HUB_USERNAME }}/ecsproject:latest
+      # - name: Replace image in task definition
+      #   run: |
+      #     sed "s|<IMAGE_NAME>|khabdrick/ecsproject:${{ github.sha }}|g" task-definition.json > task-definition.json
 
-      - name: Replace image in task definition
-        run: |
-          sed "s|<IMAGE_NAME>|khabdrick/ecsproject:${{ github.sha }}|g" task-definition.json > task-definition.json
 
+      # - name: Render Amazon ECS task definition
+      #   id: render-api-container
+      #   uses: aws-actions/amazon-ecs-render-task-definition@v1
+      #   with:
+      #     task-definition: task-definition.json
+      #     container-name: api
+      #     image: ${{ steps.build-image.outputs.image }}
+      #     environment-variables: "LOG_LEVEL=info"
 
-      - name: Render Amazon ECS task definition
-        id: render-api-container
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: task-definition.json
-          container-name: api
-          image: ${{ steps.build-image.outputs.image }}
-          environment-variables: "LOG_LEVEL=info"
-
-      - name: Update ECS Service
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
-        with:
-          task-definition: task-definition.json
-          service: ${{ secrets.ECS_SERVICE }}
-          cluster: ${{ secrets.ECS_CLUSTER }}
+      # - name: Update ECS Service
+      #   uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+      #   with:
+      #     task-definition: task-definition.json
+      #     service: ${{ secrets.ECS_SERVICE }}
+      #     cluster: ${{ secrets.ECS_CLUSTER }}
 
       - name: Save Previous Image Tag
         run: echo "PREVIOUS_IMAGE_TAG=${{ github.sha }}" > previous_image_tag.txt
@@ -63,7 +63,33 @@ jobs:
           git push origin main
         if: ${{ steps.save_previous_tag.outputs.PREVIOUS_IMAGE_TAG }}
 
-  monitor:
+      - name: Install AWS CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y awscli
+
+      - name: Configure AWS CLI
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws configure set region ${{ secrets.AWS_REGION }}
+
+      - name: Update ECS service
+        run: |
+          aws ecs update-service \
+            --cluster ${{ secrets.ECS_CLUSTER }} \
+            --service ${{ secrets.ECS_SERVICE }} \
+            --force-new-deployment \
+            --query 'service.deployments[0].taskDefinition' \
+            --output text
+
+      - name: Wait for service stabilization
+        run: |
+          aws ecs wait services-stable \
+            --cluster ${{ secrets.ECS_CLUSTER }} \
+            --services ${{ secrets.ECS_SERVICE }}
+
+  rollback:
     runs-on: ubuntu-latest
     needs: deploy
     steps:
