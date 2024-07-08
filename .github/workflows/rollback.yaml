@@ -13,7 +13,6 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Check for CloudWatch Alarms
-        id: check_alarms
         run: |
           CPU_ALARM_STATE=$(aws cloudwatch describe-alarms --alarm-names "HighCPUUtilization" --state-value ALARM --query 'MetricAlarms[0].StateValue' --region ${{ secrets.AWS_REGION }})
           MEMORY_ALARM_STATE=$(aws cloudwatch describe-alarms --alarm-names "HighMemoryUtilization" --state-value ALARM --query 'MetricAlarms[0].StateValue' --region ${{ secrets.AWS_REGION }})
@@ -34,10 +33,10 @@ jobs:
           
       - name: Replace image in task definition for rollback
         run: |
-          sed "s|<IMAGE_NAME>|khabdrick/ecsproject:${{ steps.get_previous_tag.outputs.tag }}|g" task-definition-template.json > task-definition.json
+          sed "s|<IMAGE_NAME>|khabdrick/ecsproject:${{ steps.get_previous_tag.outputs.tag }}|g" task-definition.json > task-definition.json
 
       - name: Rollback if Alarm
-        if: steps.check_alarm_state.outputs.check_alarms == 'ALARM'
+        if: steps.check_alarm_state.outputs == 'ALARM'
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
           task-definition: task-definition.json
