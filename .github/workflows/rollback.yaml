@@ -1,0 +1,47 @@
+name: Rollback on Alarm
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'  # Runs every 5 minutes
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Check for CloudWatch Alarms
+        id: check_alarms
+        run: |
+          CPU_ALARM_STATE=$(aws cloudwatch describe-alarms --alarm-names "HighCPUUtilization" --state-value ALARM --query 'MetricAlarms[0].StateValue' --region ${{ secrets.AWS_REGION }})
+          MEMORY_ALARM_STATE=$(aws cloudwatch describe-alarms --alarm-names "HighMemoryUtilization" --state-value ALARM --query 'MetricAlarms[0].StateValue' --region ${{ secrets.AWS_REGION }})
+          HTTP_ALARM_STATE=$(aws cloudwatch describe-alarms --alarm-names "HighHTTP5xxErrors" --state-value ALARM --query 'MetricAlarms[0].StateValue' --region ${{ secrets.AWS_REGION }})
+          if [ "$CPU_ALARM_STATE" == "ALARM" ] || [ "$MEMORY_ALARM_STATE" == "ALARM" ] || [ "$HTTP_ALARM_STATE" == "ALARM" ]; then
+            echo "ALARM"
+          else
+            echo "OK"
+          fi
+        continue-on-error: true
+        id: check_alarm_state
+
+      - name: Get Previous Image Tag
+        id: get_previous_tag
+        run: |
+          PREVIOUS_IMAGE_TAG=$(cat previous_image_tag.txt)
+          echo "::set-output name=tag::${PREVIOUS_IMAGE_TAG}"
+          
+      - name: Replace image in task definition for rollback
+        run: |
+          sed "s|<IMAGE_NAME>|khabdrick/ecsproject:${{ steps.get_previous_tag.outputs.tag }}|g" task-definition-template.json > task-definition.json
+
+      - name: Rollback if Alarm
+        if: steps.check_alarm_state.outputs.check_alarms == 'ALARM'
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          service: ${{ secrets.ECS_SERVICE }}
+          cluster: ${{ secrets.ECS_CLUSTER }}
+          image: khabdrick/ecsproject:${{ steps.get_previous_tag.outputs.tag }}
+          region: ${{ secrets.AWS_REGION }}
