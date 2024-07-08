@@ -114,25 +114,27 @@ jobs:
         run: |
           PREVIOUS_IMAGE_TAG=$(cat previous_image_tag.txt)
           echo "::set-output name=tag::${PREVIOUS_IMAGE_TAG}"
-          
-      - name: Replace image in task definition for rollback
+
+      - name: Install AWS CLI
         run: |
-          sed "s|<IMAGE_NAME>|khabdrick/ecsproject:${{ steps.get_previous_tag.outputs.tag }}|g" task-definition.json > task-definition.json
+          sudo apt-get update
+          sudo apt-get install -y awscli
 
-      - name: Render Amazon ECS task definition
-        id: render-api-container
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: task-definition.json
-          container-name: api
-          image: khabdrick/ecsproject:${{ steps.get_previous_tag.outputs.tag }}
-          environment-variables: "LOG_LEVEL=info"
+      - name: Configure AWS CLI
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws configure set region ${{ secrets.AWS_REGION }}
 
-      - name: Rollback if Alarm
-        if: steps.check_alarm_state.outputs == 'ALARM'
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
-        with:
-          task-definition: ${{ steps.render-api-container.outputs.task-definition }}
-          service: ${{ secrets.ECS_SERVICE }}
-          cluster: ${{ secrets.ECS_CLUSTER }}
+      - name: Rollback to previous task definition
+        run: |
+          PREV_TASK_DEF=$(aws ecs describe-services \
+            --cluster ${{ secrets.ECS_CLUSTER }} \
+            --services ${{ secrets.ECS_SERVICE }} \
+            --query 'services[0].deployments[1].taskDefinition' \
+            --output text)
+          aws ecs update-service \
+            --cluster ${{ secrets.ECS_CLUSTER }} \
+            --service ${{ secrets.ECS_SERVICE }} \
+            --task-definition $PREV_TASK_DEF
 
