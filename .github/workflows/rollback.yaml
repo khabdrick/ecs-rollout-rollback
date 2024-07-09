@@ -33,11 +33,11 @@ jobs:
         continue-on-error: true
         id: check_alarm_state
 
-      - name: Get Previous Image Tag
-        id: get_previous_tag
-        run: |
-          PREVIOUS_IMAGE_TAG=$(cat previous_image_tag.txt)
-          echo "::set-output name=tag::${PREVIOUS_IMAGE_TAG}"
+      # - name: Get Previous Image Tag
+      #   id: get_previous_tag
+      #   run: |
+      #     PREVIOUS_IMAGE_TAG=$(cat previous_image_tag.txt)
+      #     echo "::set-output name=tag::${PREVIOUS_IMAGE_TAG}"
 
       - name: Install AWS CLI
         run: |

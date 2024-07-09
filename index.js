@@ -11,7 +11,7 @@ const mongoURL = `mongodb://${process.env.MONGO_USER}:${process.env.MONGO_PASSWO
 
 // const mongoURL = `mongodb://localhost:27017/?authSource=admin`;
 
-app.get("/notes", async (req, res) => {
+app.get("/notes-v1", async (req, res) => {
   try {
     const notes = await Note.find();
     res.status(200).json({
