@@ -8,6 +8,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    outputs:
+      deploy-status: ${{ steps.mark-deploy-success.outputs.status }}
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -76,10 +78,9 @@ jobs:
           done
       
       - name: Mark deploy as successful
-        id: deploy-success
-        run: echo "Deploy successful"
-        outputs:
-          status: success
+        id: mark-deploy-success
+        run: echo "::set-output name=status::success"
+
 
   
 
