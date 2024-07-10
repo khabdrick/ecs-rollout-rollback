@@ -23,7 +23,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-
       - name: Build and push Docker image
         id: build-image
         run: |
@@ -32,18 +31,18 @@ jobs:
           docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/ecsproject:latest .
           docker push ${{ secrets.DOCKER_HUB_USERNAME }}/ecsproject:latest
 
-      # - name: Save Previous Image Tag
-      #   run: echo "PREVIOUS_IMAGE_TAG=${{ github.sha }}" > previous_image_tag.txt
-      #   id: save_previous_tag
+      - name: Save Previous Image Tag
+        run: echo "PREVIOUS_IMAGE_TAG=${{ github.sha }}" > previous_image_tag.txt
+        id: save_previous_tag
 
-      # - name: Commit and Push Previous Image Tag
-      #   run: |
-      #     git config --global user.email "github-actions[bot]@users.noreply.github.com"
-      #     git config --global user.name "github-actions[bot]"
-      #     git add previous_image_tag.txt
-      #     git commit -m "Update previous image tag"
-      #     git push origin main
-      #   if: ${{ steps.save_previous_tag.outputs.PREVIOUS_IMAGE_TAG }}
+      - name: Commit and Push Previous Image Tag
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git add previous_image_tag.txt
+          git commit -m "Update previous image tag"
+          git push origin main
+        if: ${{ steps.save_previous_tag.outputs.PREVIOUS_IMAGE_TAG }}
 
       - name: Install AWS CLI
         run: |
@@ -56,14 +55,34 @@ jobs:
           aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws configure set region ${{ secrets.AWS_REGION }}
 
-      - name: Update ECS service
+      - name: Register new task definition revision
+        id: register_task
+        run: |
+          TASK_DEFINITION=$(aws ecs register-task-definition \
+            --family my-task-family \
+            --container-definitions '[
+              {
+                "name": "my-container",
+                "image": "khabdrick/ecsproject:${{ github.sha }}",
+                "cpu": 256,
+                "memory": 512,
+                "essential": true,
+                "portMappings": [
+                  {
+                    "containerPort": 80,
+                    "hostPort": 80
+                  }
+                ]
+              }
+            ]')
+          echo "::set-output name=task_definition::$(echo $TASK_DEFINITION | jq -r '.taskDefinition.taskDefinitionArn')"
+
+      - name: Update ECS service to use new task definition
         run: |
           aws ecs update-service \
             --cluster ${{ secrets.ECS_CLUSTER }} \
             --service ${{ secrets.ECS_SERVICE }} \
-            --force-new-deployment \
-            --query 'service.deployments[0].taskDefinition' \
-            --output text
+            --task-definition ${{ steps.register_task.outputs.task_definition }}
 
       - name: Wait for service stabilization
         run: |
@@ -76,12 +95,7 @@ jobs:
               sleep 30
             fi
           done
-      
+
       - name: Mark deploy as successful
         id: mark-deploy-success
         run: echo "::set-output name=status::success"
-
-
-  
-
-      
