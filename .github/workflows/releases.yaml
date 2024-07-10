@@ -59,10 +59,10 @@ jobs:
         id: register_task
         run: |
           TASK_DEFINITION=$(aws ecs register-task-definition \
-            --family my-task-family \
+            --family ecsproject_task \
             --container-definitions '[
               {
-                "name": "my-container",
+                "name": "project_container",
                 "image": "khabdrick/ecsproject:${{ github.sha }}",
                 "cpu": 256,
                 "memory": 512,
