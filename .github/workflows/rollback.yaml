@@ -38,7 +38,7 @@ jobs:
           CPU_ALARM_STATE=$(aws cloudwatch describe-alarms --alarm-names "HighCPUUtilization" --state-value ALARM --query 'MetricAlarms[0].StateValue' --region ${{ secrets.AWS_REGION }})
           MEMORY_ALARM_STATE=$(aws cloudwatch describe-alarms --alarm-names "HighMemoryUtilization" --state-value ALARM --query 'MetricAlarms[0].StateValue' --region ${{ secrets.AWS_REGION }})
           HTTP_ALARM_STATE=$(aws cloudwatch describe-alarms --alarm-names "HighHTTP5xxErrors" --state-value ALARM --query 'MetricAlarms[0].StateValue' --region ${{ secrets.AWS_REGION }})
-          if [ "$CPU_ALARM_STATE" == "ALARM" ] || [ "$MEMORY_ALARM_STATE" == "ALARM" ] || [ "$HTTP_ALARM_STATE" == "ALARM" ]; then
+          if [[ "$CPU_ALARM_STATE" == "ALARM" ]] || [[ "$MEMORY_ALARM_STATE" == "ALARM" ]] || [[ "$HTTP_ALARM_STATE" == "ALARM" ]]; then
             echo "ALARM"
             echo "::set-output name=alarm_state::ALARM"
           else
