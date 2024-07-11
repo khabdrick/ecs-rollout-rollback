@@ -39,7 +39,13 @@ jobs:
       - name: Register new task definition revision
         run: |
           aws ecs register-task-definition \
-            --cli-input-json file://task-definition.json \
+            --family ecsproject_task \
+            --execution-role-arn ${{ secrets.ECS_EXECUTION_ROLE_ARN }} \
+            --task-role-arn ${{ secrets.ECS_TASK_ROLE_ARN }} \
+            --network-mode awsvpc \
+            --requires-compatibilities FARGATE \
+            --cpu "1024" \
+            --memory "3072" \
             --container-definitions '[
                 {
                     "name": "mongo",
@@ -85,6 +91,7 @@ jobs:
                     "name": "project_container",
                     "image": "${{ env.IMAGE_TAG }}",
                     "cpu": 0,
+                    "memory": 1024,
                     "portMappings": [
                         {
                             "containerPort": 3000,
@@ -113,6 +120,16 @@ jobs:
                     ]
                 }
             ]' \
+            --volumes '[
+                {
+                    "name": "mongo-mount",
+                    "efsVolumeConfiguration": {
+                        "fileSystemId": "fs-0ae93a5984f5ff5c0",
+                        "rootDirectory": "/"
+                    }
+                }
+            ]' \
+            --runtime-platform '{"cpuArchitecture": "X86_64", "operatingSystemFamily": "LINUX"}' \
             --output json > new-task-def.json
 
       - name: Update ECS service to use new task definition
