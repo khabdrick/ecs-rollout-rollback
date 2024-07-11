@@ -40,8 +40,8 @@ jobs:
         run: |
           aws ecs register-task-definition \
             --family ecsproject_task \
-            --execution-role-arn ${{ secrets.ECS_EXECUTION_ROLE_ARN }} \
-            --task-role-arn ${{ secrets.ECS_TASK_ROLE_ARN }} \
+            --execution-role-arn arn:aws:iam::925248302005:role/ecstaskrole \
+            --task-role-arn arn:aws:iam::925248302005:role/ecstaskrole \
             --network-mode awsvpc \
             --requires-compatibilities FARGATE \
             --cpu "1024" \
