@@ -35,15 +35,18 @@ jobs:
       - name: Check for CloudWatch Alarms
         id: check_alarm_state
         run: |
-          CPU_ALARM_STATE=$(aws cloudwatch describe-alarms --alarm-names "HighCPUUtilization" --state-value ALARM --query 'MetricAlarms[0].StateValue' --region ${{ secrets.AWS_REGION }})
-          MEMORY_ALARM_STATE=$(aws cloudwatch describe-alarms --alarm-names "HighMemoryUtilization" --state-value ALARM --query 'MetricAlarms[0].StateValue' --region ${{ secrets.AWS_REGION }})
-          HTTP_ALARM_STATE=$(aws cloudwatch describe-alarms --alarm-names "HighHTTP5xxErrors" --state-value ALARM --query 'MetricAlarms[0].StateValue' --region ${{ secrets.AWS_REGION }})
+          CPU_ALARM_STATE=$(aws cloudwatch describe-alarms --alarm-names "HighCPUUtilization" --state-value ALARM --query 'MetricAlarms[0].StateValue' --region ***)
+          MEMORY_ALARM_STATE=$(aws cloudwatch describe-alarms --alarm-names "HighMemoryUtilization" --state-value ALARM --query 'MetricAlarms[0].StateValue' --region ***)
+          HTTP_ALARM_STATE=$(aws cloudwatch describe-alarms --alarm-names "HighHTTP5xxErrors" --state-value ALARM --query 'MetricAlarms[0].StateValue' --region ***)
+
           if [[ "$CPU_ALARM_STATE" == "ALARM" ]] || [[ "$MEMORY_ALARM_STATE" == "ALARM" ]] || [[ "$HTTP_ALARM_STATE" == "ALARM" ]]; then
             echo "ALARM"
             echo "::set-output name=alarm_state::ALARM"
           else
             echo "OK"
             echo "::set-output name=alarm_state::OK"
+          fi
+
 
       - name: Get the second-to-last task definition revision
         id: get_previous_task_definition
@@ -54,7 +57,6 @@ jobs:
           else
             echo "No alarm, no rollback needed."
             exit 0
-
       
       - name: Rollback to previous task definition
         if: steps.check_alarm_state.outputs.alarm_state == 'ALARM'
@@ -63,3 +65,5 @@ jobs:
             --cluster ${{ secrets.ECS_CLUSTER }} \
             --service ${{ secrets.ECS_SERVICE }} \
             --task-definition ${{ steps.get_previous_task_definition.outputs.task_definition }}
+
+      
