@@ -8,8 +8,6 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    outputs:
-      deploy-status: ${{ steps.mark-deploy-success.outputs.status }}
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -24,30 +22,13 @@ jobs:
         uses: docker/setup-buildx-action@v2
 
       - name: Build and push Docker image
-        id: build-image
         run: |
           docker build -t khabdrick/ecsproject:${{ github.sha }} .
           docker push khabdrick/ecsproject:${{ github.sha }}
-          docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/ecsproject:latest .
-          docker push ${{ secrets.DOCKER_HUB_USERNAME }}/ecsproject:latest
-
-      # - name: Save Previous Image Tag
-      #   run: echo "PREVIOUS_IMAGE_TAG=${{ github.sha }}" > previous_image_tag.txt
-      #   id: save_previous_tag
-
-      # - name: Commit and Push Previous Image Tag
-      #   run: |
-      #     git config --global user.email "github-actions[bot]@users.noreply.github.com"
-      #     git config --global user.name "github-actions[bot]"
-      #     git add previous_image_tag.txt
-      #     git commit -m "Update previous image tag"
-      #     git push origin main
-      #   if: ${{ steps.save_previous_tag.outputs.PREVIOUS_IMAGE_TAG }}
+          echo "IMAGE_TAG=khabdrick/ecsproject:${{ github.sha }}" >> $GITHUB_ENV
 
       - name: Install AWS CLI
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y awscli
+        run: sudo apt-get update && sudo apt-get install -y awscli
 
       - name: Configure AWS CLI
         run: |
@@ -56,51 +37,88 @@ jobs:
           aws configure set region ${{ secrets.AWS_REGION }}
 
       - name: Register new task definition revision
-        id: register_task
         run: |
-          TASK_DEFINITION=$(aws ecs register-task-definition \
-            --family ecsproject_task \
-            --execution-role-arn arn:aws:iam::925248302005:role/ecstaskrole \
-            --network-mode awsvpc \
-            --requires-compatibilities FARGATE \
-            --cpu "256" \
-            --memory "512" \
+          aws ecs register-task-definition \
+            --cli-input-json file://task-definition.json \
             --container-definitions '[
-              {
-                "name": "project_container",
-                "image": "khabdrick/ecsproject:${{ github.sha }}",
-                "cpu": 256,
-                "memory": 512,
-                "essential": true,
-                "portMappings": [
-                  {
-                    "containerPort": 3000,
-                    "hostPort": 3000
-                  }
-                ]
-              }
-            ]')
-          echo "::set-output name=task_definition::$(echo $TASK_DEFINITION | jq -r '.taskDefinition.taskDefinitionArn')"
+                {
+                    "name": "mongo",
+                    "image": "mongo:latest",
+                    "cpu": 0,
+                    "memory": 2048,
+                    "portMappings": [
+                        {
+                            "containerPort": 27017,
+                            "hostPort": 27017,
+                            "protocol": "tcp"
+                        }
+                    ],
+                    "essential": true,
+                    "environment": [
+                        {
+                            "name": "MONGO_INITDB_ROOT_USERNAME",
+                            "value": "mongo"
+                        },
+                        {
+                            "name": "MONGO_INITDB_ROOT_PASSWORD",
+                            "value": "password"
+                        }
+                    ],
+                    "mountPoints": [
+                        {
+                            "sourceVolume": "mongo-mount",
+                            "containerPath": "/data/db",
+                            "readOnly": false
+                        }
+                    ],
+                    "logConfiguration": {
+                        "logDriver": "awslogs",
+                        "options": {
+                            "awslogs-group": "/ecs/ecsproject_task",
+                            "awslogs-create-group": "true",
+                            "awslogs-region": "us-east-1",
+                            "awslogs-stream-prefix": "ecs"
+                        }
+                    }
+                },
+                {
+                    "name": "project_container",
+                    "image": "${{ env.IMAGE_TAG }}",
+                    "cpu": 0,
+                    "portMappings": [
+                        {
+                            "containerPort": 3000,
+                            "hostPort": 3000,
+                            "protocol": "tcp"
+                        }
+                    ],
+                    "essential": false,
+                    "environment": [
+                        {
+                            "name": "MONGO_USER",
+                            "value": "mongo"
+                        },
+                        {
+                            "name": "MONGO_IP",
+                            "value": "localhost"
+                        },
+                        {
+                            "name": "MONGO_PORT",
+                            "value": "27017"
+                        },
+                        {
+                            "name": "MONGO_PASSWORD",
+                            "value": "password"
+                        }
+                    ]
+                }
+            ]' \
+            --output json > new-task-def.json
 
       - name: Update ECS service to use new task definition
         run: |
+          NEW_TASK_DEF_ARN=$(jq -r '.taskDefinition.taskDefinitionArn' new-task-def.json)
           aws ecs update-service \
             --cluster ${{ secrets.ECS_CLUSTER }} \
             --service ${{ secrets.ECS_SERVICE }} \
-            --task-definition ${{ steps.register_task.outputs.task_definition }}
-
-      - name: Wait for service stabilization
-        run: |
-          for attempt in {1..10}; do
-            if aws ecs wait services-stable --cluster ${{ secrets.ECS_CLUSTER }} --services ${{ secrets.ECS_SERVICE }}; then
-              echo "Service stabilized on attempt $attempt"
-              break
-            else
-              echo "Attempt $attempt failed, retrying..."
-              sleep 30
-            fi
-          done
-
-      - name: Mark deploy as successful
-        id: mark-deploy-success
-        run: echo "::set-output name=status::success"
+            --task-definition $NEW_TASK_DEF_ARN
