@@ -67,7 +67,7 @@ jobs:
             --memory "512" \
             --container-definitions '[
               {
-                "name": "my-container",
+                "name": "project_container",
                 "image": "khabdrick/ecsproject:${{ github.sha }}",
                 "cpu": 256,
                 "memory": 512,
