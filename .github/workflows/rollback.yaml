@@ -63,4 +63,3 @@ jobs:
             --cluster ${{ secrets.ECS_CLUSTER }} \
             --service ${{ secrets.ECS_SERVICE }} \
             --task-definition ${{ steps.get_previous_task_definition.outputs.task_definition }}
-            --launch-type FARGATE
