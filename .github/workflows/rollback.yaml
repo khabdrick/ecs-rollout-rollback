@@ -57,6 +57,7 @@ jobs:
           else
             echo "No alarm, no rollback needed."
             exit 0
+          fi
       
       - name: Rollback to previous task definition
         if: steps.check_alarm_state.outputs.alarm_state == 'ALARM'

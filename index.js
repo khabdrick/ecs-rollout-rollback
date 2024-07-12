@@ -26,6 +26,21 @@ app.get("/notes", async (req, res) => {
   }
 });
 
+app.get("/v1/notes", async (req, res) => {
+  try {
+    const notes = await Note.find();
+    res.status(200).json({
+      notes,
+    });
+  } catch (e) {
+    console.log(e);
+
+    res.status(400).json({
+      status: "fail",
+    });
+  }
+});
+
 app.get("/notes/:id", async (req, res) => {
   try {
     const note = await Note.findById(req.params.id);
